@@ -6,10 +6,11 @@ DATA = pg_pgq2sql--1.0.sql
 PGFILEDESC = "pg_pgq2sql - convert SQL/PGQ Query structure back to plain SQL"
 
 OBJS = \
-	$(WIN32RES)   \
+	$(WIN32RES) \
 	pg_pgq2sql.o
 
-REGRESS = pg_pgq2sql
+REGRESS = simple_test \
+		  graph_table_test
 
 ifdef USE_PGXS
 PG_CONFIG ?= pg_config
