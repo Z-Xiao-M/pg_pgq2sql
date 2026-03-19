@@ -17,9 +17,9 @@ Requires PostgreSQL master branch (SQL/PGQ is not yet in any released version).
 Compile and install the extension:
 
 ```sh
-cd contrib/pg_pgq2sql
-make
-make install
+cd contrib
+git clone git@github.com:Z-Xiao-M/pg_pgq2sql.git
+make && make install
 ```
 
 ## Getting Started

@@ -17,9 +17,9 @@
 编译并安装扩展：
 
 ```sh
-cd contrib/pg_pgq2sql
-make
-make install
+cd contrib
+git clone git@github.com:Z-Xiao-M/pg_pgq2sql.git
+make && make install
 ```
 
 ## 快速开始
