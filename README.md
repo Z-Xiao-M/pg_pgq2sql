@@ -2,7 +2,7 @@
 
 Convert SQL/PGQ (Property Graph Query) to plain SQL.
 
-[中文](./README_CN.md) | English
+English | [中文](./README_CN.md)
 
 `pg_pgq2sql` is a PostgreSQL extension that converts SQL/PGQ query statements back to plain SQL text after the query rewrite phase. This is useful for understanding how PostgreSQL transforms graph queries into relational queries.
 
