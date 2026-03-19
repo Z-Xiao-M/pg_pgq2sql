@@ -8,7 +8,7 @@
 
 ## 环境要求
 
-需要 PostgreSQL master 分支（SQL/PGQ 尚未在任何正式版本中发布）。
+PostgreSQL 19devel
 
 ## 安装
 

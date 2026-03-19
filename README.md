@@ -8,7 +8,7 @@ English | [中文](./README_CN.md)
 
 ## Requirements
 
-Requires PostgreSQL master branch (SQL/PGQ is not yet in any released version).
+PostgreSQL 19devel
 
 ## Installation
 
