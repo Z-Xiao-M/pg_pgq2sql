@@ -1,0 +1,5 @@
+# pg_pgq2sql extension
+comment = 'convert SQL/PGQ Query structure back to plain SQL'
+default_version = '1.0'
+module_pathname = '$libdir/pg_pgq2sql'
+relocatable = true

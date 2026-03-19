@@ -1,0 +1,185 @@
+CREATE EXTENSION pg_pgq2sql;
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    name VARCHAR(50)
+);
+CREATE TABLE follows (
+    id INT PRIMARY KEY,
+    follower INT REFERENCES users(id),
+    following INT REFERENCES users(id)
+);
+INSERT INTO users VALUES
+    (1, '张三'), (2, '李四'), (3, '王五'), (4, '赵六');
+INSERT INTO follows VALUES
+    (1, 1, 2),  -- 张三 关注 李四
+    (2, 1, 3),  -- 张三 关注 王五
+    (3, 2, 3),  -- 李四 关注 王五
+    (4, 2, 4),  -- 李四 关注 赵六
+    (5, 3, 4);  -- 王五 关注 赵六
+CREATE PROPERTY GRAPH social_graph
+    VERTEX TABLES (users)
+    EDGE TABLES (
+        follows
+            SOURCE KEY (follower) REFERENCES users(id)
+            DESTINATION KEY (following) REFERENCES users(id)
+    );
+SELECT common_name
+FROM GRAPH_TABLE (
+    social_graph
+    MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+    WHERE a.name = '张三' AND b.name = '李四'
+    COLUMNS (x.name AS common_name)
+);
+ common_name 
+-------------
+ 王五
+(1 row)
+
+SELECT * FROM pg_pgq2sql($$SELECT common_name
+                            FROM GRAPH_TABLE (
+                                social_graph
+                                MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+                                WHERE a.name = '张三' AND b.name = '李四'
+                                COLUMNS (x.name AS common_name)
+                            )$$);
+                                                                                                                    pg_pgq2sql                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT common_name                                                                                                                                                                                                                             +
+    FROM LATERAL ( SELECT users_1.name AS common_name                                                                                                                                                                                            +
+            FROM users,                                                                                                                                                                                                                          +
+             follows,                                                                                                                                                                                                                            +
+             users users_1,                                                                                                                                                                                                                      +
+             follows follows_1,                                                                                                                                                                                                                  +
+             users users_2                                                                                                                                                                                                                       +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = '张三'::text AND users_2.name::text = '李四'::text) "graph_table"
+(1 row)
+
+SELECT * FROM pg_pgq2sql_print($$SELECT common_name
+                            FROM GRAPH_TABLE (
+                                social_graph
+                                MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+                                WHERE a.name = '张三' AND b.name = '李四'
+                                COLUMNS (x.name AS common_name)
+                            )$$);
+INFO:  
+ SELECT common_name
+   FROM LATERAL ( SELECT users_1.name AS common_name
+           FROM users,
+            follows,
+            users users_1,
+            follows follows_1,
+            users users_2
+          WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = '张三'::text AND users_2.name::text = '李四'::text) "graph_table"
+ pg_pgq2sql_print 
+------------------
+ 
+(1 row)
+
+SELECT common_name
+FROM LATERAL ( SELECT users_1.name AS common_name
+        FROM users,
+        follows,
+        users users_1,
+        follows follows_1,
+        users users_2
+        WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = '张三'::text AND users_2.name::text = '李四'::text) "graph_table";
+ common_name 
+-------------
+ 王五
+(1 row)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT common_name
+FROM GRAPH_TABLE (
+    social_graph
+    MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+    WHERE a.name = '张三' AND b.name = '李四'
+    COLUMNS (x.name AS common_name)
+);
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Nested Loop
+   Output: users_1.name
+   Inner Unique: true
+   ->  Hash Join
+         Output: users_1.name, follows_1.follower
+         Hash Cond: (follows_1.following = users_1.id)
+         ->  Seq Scan on public.follows follows_1
+               Output: follows_1.id, follows_1.follower, follows_1.following
+         ->  Hash
+               Output: follows.following, users_1.name, users_1.id
+               ->  Nested Loop
+                     Output: follows.following, users_1.name, users_1.id
+                     Inner Unique: true
+                     ->  Hash Join
+                           Output: follows.following
+                           Inner Unique: true
+                           Hash Cond: (follows.follower = users.id)
+                           ->  Seq Scan on public.follows
+                                 Output: follows.id, follows.follower, follows.following
+                           ->  Hash
+                                 Output: users.id
+                                 ->  Seq Scan on public.users
+                                       Output: users.id
+                                       Filter: ((users.name)::text = '张三'::text)
+                     ->  Index Scan using users_pkey on public.users users_1
+                           Output: users_1.id, users_1.name
+                           Index Cond: (users_1.id = follows.following)
+   ->  Index Scan using users_pkey on public.users users_2
+         Output: users_2.id, users_2.name
+         Index Cond: (users_2.id = follows_1.follower)
+         Filter: ((users_2.name)::text = '李四'::text)
+(31 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT common_name
+FROM LATERAL ( SELECT users_1.name AS common_name
+        FROM users,
+        follows,
+        users users_1,
+        follows follows_1,
+        users users_2
+        WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = '张三'::text AND users_2.name::text = '李四'::text) "graph_table";
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Nested Loop
+   Output: users_1.name
+   Inner Unique: true
+   ->  Hash Join
+         Output: users_1.name, follows_1.follower
+         Hash Cond: (follows_1.following = users_1.id)
+         ->  Seq Scan on public.follows follows_1
+               Output: follows_1.id, follows_1.follower, follows_1.following
+         ->  Hash
+               Output: follows.following, users_1.name, users_1.id
+               ->  Nested Loop
+                     Output: follows.following, users_1.name, users_1.id
+                     Inner Unique: true
+                     ->  Hash Join
+                           Output: follows.following
+                           Inner Unique: true
+                           Hash Cond: (follows.follower = users.id)
+                           ->  Seq Scan on public.follows
+                                 Output: follows.id, follows.follower, follows.following
+                           ->  Hash
+                                 Output: users.id
+                                 ->  Seq Scan on public.users
+                                       Output: users.id
+                                       Filter: ((users.name)::text = '张三'::text)
+                     ->  Index Scan using users_pkey on public.users users_1
+                           Output: users_1.id, users_1.name
+                           Index Cond: (users_1.id = follows.following)
+   ->  Index Scan using users_pkey on public.users users_2
+         Output: users_2.id, users_2.name
+         Index Cond: (users_2.id = follows_1.follower)
+         Filter: ((users_2.name)::text = '李四'::text)
+(31 rows)
+
+DROP TABLE users CASCADE;
+NOTICE:  drop cascades to 4 other objects
+DETAIL:  drop cascades to constraint follows_follower_fkey on table follows
+drop cascades to constraint follows_following_fkey on table follows
+drop cascades to vertex users of property graph social_graph
+drop cascades to edge follows of property graph social_graph
+DROP TABLE follows CASCADE;
+DROP EXTENSION pg_pgq2sql;
