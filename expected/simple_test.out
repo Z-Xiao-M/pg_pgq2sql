@@ -52,7 +52,8 @@ INFO:
             users users_1,
             follows follows_1,
             users users_2
-          WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = 'Alice'::text AND users_2.name::text = 'Bob'::text) "graph_table"
+          WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = 'Alice'::text AND users_2.name::text = 'Bob'::text) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  

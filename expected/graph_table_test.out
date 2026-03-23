@@ -118,7 +118,8 @@ SELECT pg_pgq2sql_info('SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)
 INFO:  
  SELECT name
    FROM LATERAL ( SELECT customers.name
-           FROM customers) "graph_table"
+           FROM customers) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  
@@ -147,7 +148,8 @@ INFO:
            FROM customers,
             customer_orders,
             orders
-          WHERE customers.address::text = 'US'::text AND customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table"
+          WHERE customers.address::text = 'US'::text AND customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  
@@ -178,7 +180,8 @@ INFO:
            FROM customers,
             customer_orders,
             orders
-          WHERE customers.address::text = 'US'::text AND customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table"
+          WHERE customers.address::text = 'US'::text AND customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  
@@ -210,7 +213,8 @@ INFO:
            FROM customers,
             customer_orders,
             orders
-          WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id AND orders.ordered_when = '01-02-2024'::date) "graph_table"
+          WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id AND orders.ordered_when = '01-02-2024'::date) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  
@@ -240,7 +244,8 @@ INFO:
     ordered_when
    FROM LATERAL ( SELECT NULL::character varying AS name,
             NULL::date AS ordered_when
-          WHERE false) "graph_table"
+          WHERE false) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  
@@ -271,7 +276,8 @@ INFO:
            FROM orders,
             customer_orders,
             customers
-          WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table"
+          WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  
@@ -308,7 +314,8 @@ INFO:
            FROM orders,
             customer_orders,
             customers
-          WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table"
+          WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  
@@ -364,7 +371,8 @@ INFO:
             wishlist_items,
             products
           WHERE customers.customer_id = customer_wishlists.customer_id AND wishlists.wishlist_id = customer_wishlists.wishlist_id AND wishlists.wishlist_id = wishlist_items.wishlist_id AND products.product_no = wishlist_items.product_no) "graph_table"
-  ORDER BY customer_name, product_name, list_type
+  ORDER BY customer_name, product_name, list_type;
+
  pg_pgq2sql_info 
 -----------------
  
@@ -438,7 +446,8 @@ INFO:
             wishlist_items,
             products
           WHERE customers.customer_id = customer_wishlists.customer_id AND wishlists.wishlist_id = customer_wishlists.wishlist_id AND wishlists.wishlist_id = wishlist_items.wishlist_id AND products.product_no = wishlist_items.product_no) "graph_table"
-  ORDER BY customer_name, product_name
+  ORDER BY customer_name, product_name;
+
  pg_pgq2sql_info 
 -----------------
  
@@ -493,7 +502,8 @@ INFO:
             customer_orders,
             orders
           WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table"
-  ORDER BY name
+  ORDER BY name;
+
  pg_pgq2sql_info 
 -----------------
  
@@ -535,7 +545,8 @@ INFO:
            FROM customers,
             customer_orders,
             orders
-          WHERE customers.address::text = 'US'::text AND customers.customer_id = x1.a AND customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table"
+          WHERE customers.address::text = 'US'::text AND customers.customer_id = x1.a AND customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table";
+
  pg_pgq2sql_info 
 -----------------
  

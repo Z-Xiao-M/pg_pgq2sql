@@ -123,7 +123,7 @@ pg_pgq2sql_info(PG_FUNCTION_ARGS)
     pfree(query_string);
 
     /* Print result to server log / stdout */
-    elog(INFO, "\n%s", result);
+    elog(INFO, "\n%s;\n", result);
 
     PG_RETURN_NULL();
 }
