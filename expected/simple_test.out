@@ -35,7 +35,7 @@ FROM GRAPH_TABLE (
  Charlie
 (1 row)
 
-SELECT * FROM pg_pgq2sql_print($$
+SELECT * FROM pg_pgq2sql_info($$
     SELECT common_name
     FROM GRAPH_TABLE (
         social_graph
@@ -53,8 +53,8 @@ INFO:
             follows follows_1,
             users users_2
           WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = 'Alice'::text AND users_2.name::text = 'Bob'::text) "graph_table"
- pg_pgq2sql_print 
-------------------
+ pg_pgq2sql_info 
+-----------------
  
 (1 row)
 
@@ -119,7 +119,7 @@ SELECT * FROM pg_pgq2sql($$SELECT common_name
                                 COLUMNS (x.name AS common_name)
                             )$$);
 ERROR:  no property graph element of type "vertex" has label "users" associated with it in property graph "social_graph"
-SELECT * FROM pg_pgq2sql_print($$SELECT common_name
+SELECT * FROM pg_pgq2sql_info($$SELECT common_name
                             FROM GRAPH_TABLE (
                                 social_graph
                                 MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)

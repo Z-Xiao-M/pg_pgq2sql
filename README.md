@@ -66,7 +66,7 @@ CREATE PROPERTY GRAPH social_graph
 Use `pg_pgq2sql` to see how a graph query is transformed:
 
 ```sql
-SELECT * FROM pg_pgq2sql_print($$
+SELECT * FROM pg_pgq2sql($$
     SELECT common_name
     FROM GRAPH_TABLE (
         social_graph
@@ -100,12 +100,12 @@ Parse and rewrite a SQL/PGQ query, then return the converted plain SQL text.
 SELECT pg_pgq2sql($$SELECT ... FROM GRAPH_TABLE (...)$$);
 ```
 
-### pg_pgq2sql_print(query text)
+### pg_pgq2sql_info(query text)
 
 Same as `pg_pgq2sql`, but prints the result to server log/stdout and returns NULL. Easier to copy.
 
 ```sql
-SELECT pg_pgq2sql_print($$SELECT ... FROM GRAPH_TABLE (...)$$);
+SELECT pg_pgq2sql_info($$SELECT ... FROM GRAPH_TABLE (...)$$);
 ```
 
 ## Running Tests

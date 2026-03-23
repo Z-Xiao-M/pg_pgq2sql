@@ -20,15 +20,15 @@ COMMENT ON FUNCTION pg_pgq2sql(text) IS
 'Parse and rewrite a SQL/PGQ query string, then convert back to plain SQL';
 
 --
--- pg_pgq2sql_print(query text)
+-- pg_pgq2sql_info(query text)
 --
 -- Same as pg_pgq2sql but prints the result to stdout instead of returning it.
 -- Returns NULL for convenience.
 --
-CREATE FUNCTION pg_pgq2sql_print(query text)
+CREATE FUNCTION pg_pgq2sql_info(query text)
 RETURNS void
-AS 'MODULE_PATHNAME', 'pg_pgq2sql_print'
+AS 'MODULE_PATHNAME', 'pg_pgq2sql_info'
 LANGUAGE C STABLE STRICT;
 
-COMMENT ON FUNCTION pg_pgq2sql_print(text) IS
+COMMENT ON FUNCTION pg_pgq2sql_info(text) IS
 'Parse and rewrite a SQL/PGQ query string, print the converted SQL to stdout';

@@ -37,7 +37,7 @@ FROM GRAPH_TABLE (
     COLUMNS (x.name AS common_name)
 );
 
-SELECT * FROM pg_pgq2sql_print($$
+SELECT * FROM pg_pgq2sql_info($$
     SELECT common_name
     FROM GRAPH_TABLE (
         social_graph
@@ -109,7 +109,7 @@ SELECT * FROM pg_pgq2sql($$SELECT common_name
                                 COLUMNS (x.name AS common_name)
                             )$$);
 
-SELECT * FROM pg_pgq2sql_print($$SELECT common_name
+SELECT * FROM pg_pgq2sql_info($$SELECT common_name
                             FROM GRAPH_TABLE (
                                 social_graph
                                 MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)

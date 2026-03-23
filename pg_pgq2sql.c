@@ -76,16 +76,16 @@ pg_pgq2sql(PG_FUNCTION_ARGS)
     PG_RETURN_TEXT_P(cstring_to_text(result));
 }
 
-PG_FUNCTION_INFO_V1(pg_pgq2sql_print);
+PG_FUNCTION_INFO_V1(pg_pgq2sql_info);
 
 /*
- * pg_pgq2sql_print(query text)
+ * pg_pgq2sql_info(query text)
  *
  * Same as pg_pgq2sql but prints the result to stdout (via elog INFO)
  * and returns NULL.
  */
 Datum
-pg_pgq2sql_print(PG_FUNCTION_ARGS)
+pg_pgq2sql_info(PG_FUNCTION_ARGS)
 {
     text       *query_text = PG_GETARG_TEXT_PP(0);
     char       *query_string;

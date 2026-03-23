@@ -118,13 +118,13 @@ INSERT INTO wishlist_items (wishlist_items_id, wishlist_id, product_no) VALUES
 
 -- single element path pattern
 SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers) COLUMNS (c.name));
-SELECT pg_pgq2sql_print('SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers) COLUMNS (c.name))');
+SELECT pg_pgq2sql_info('SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers) COLUMNS (c.name))');
  SELECT name
    FROM LATERAL ( SELECT customers.name
            FROM customers) "graph_table";
 
 SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US')-[IS customer_orders]->(o IS orders) COLUMNS (c.name));
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US')-[IS customer_orders]->(o IS orders) COLUMNS (c.name))$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US')-[IS customer_orders]->(o IS orders) COLUMNS (c.name))$$);
  SELECT name
    FROM LATERAL ( SELECT customers.name
            FROM customers,
@@ -134,7 +134,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customer
 
 -- graph element specification without label or variable
 SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US')-[]->(o IS orders) COLUMNS (c.name AS customer_name));
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US')-[]->(o IS orders) COLUMNS (c.name AS customer_name));$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US')-[]->(o IS orders) COLUMNS (c.name AS customer_name));$$);
  SELECT customer_name
    FROM LATERAL ( SELECT customers.name AS customer_name
            FROM customers,
@@ -143,7 +143,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customer
           WHERE customers.address::text = 'US'::text AND customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table";
 
 SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[co IS customer_orders]->(o IS orders WHERE o.ordered_when = date '2024-01-02') COLUMNS (c.name, c.address));
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[co IS customer_orders]->(o IS orders WHERE o.ordered_when = date '2024-01-02') COLUMNS (c.name, c.address));$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[co IS customer_orders]->(o IS orders WHERE o.ordered_when = date '2024-01-02') COLUMNS (c.name, c.address));$$);
  SELECT name,
     address
    FROM LATERAL ( SELECT customers.name,
@@ -154,7 +154,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customer
           WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id AND orders.ordered_when = '01-02-2024'::date) "graph_table";
 
 SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)-[IS customer_orders]->(c IS customers) COLUMNS (c.name, o.ordered_when));
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)-[IS customer_orders]->(c IS customers) COLUMNS (c.name, o.ordered_when));$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)-[IS customer_orders]->(c IS customers) COLUMNS (c.name, o.ordered_when));$$);
  SELECT name,
     ordered_when
    FROM LATERAL ( SELECT NULL::character varying AS name,
@@ -162,7 +162,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)-
           WHERE false) "graph_table";
 
 SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)<-[IS customer_orders]-(c IS customers) COLUMNS (c.name, o.ordered_when));
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)<-[IS customer_orders]-(c IS customers) COLUMNS (c.name, o.ordered_when));$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)<-[IS customer_orders]-(c IS customers) COLUMNS (c.name, o.ordered_when));$$);
  SELECT name,
     ordered_when
    FROM LATERAL ( SELECT customers.name,
@@ -174,7 +174,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (o IS orders)<
 
 -- spaces around pattern operators
 SELECT * FROM GRAPH_TABLE (myshop MATCH ( o IS orders ) <- [ IS customer_orders ] - (c IS customers) COLUMNS ( c.name, o.ordered_when));
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH ( o IS orders ) <- [ IS customer_orders ] - (c IS customers) COLUMNS ( c.name, o.ordered_when));$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH ( o IS orders ) <- [ IS customer_orders ] - (c IS customers) COLUMNS ( c.name, o.ordered_when));$$);
  SELECT name,
     ordered_when
    FROM LATERAL ( SELECT customers.name,
@@ -185,7 +185,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH ( o IS orders 
           WHERE customers.customer_id = customer_orders.customer_id AND orders.order_id = customer_orders.order_id) "graph_table";
 
 SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[IS cust_lists]->(l IS lists)-[ IS list_items]->(p IS products) COLUMNS (c.name AS customer_name, p.name AS product_name, l.list_type)) ORDER BY customer_name, product_name, list_type;
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[IS cust_lists]->(l IS lists)-[ IS list_items]->(p IS products) COLUMNS (c.name AS customer_name, p.name AS product_name, l.list_type)) ORDER BY customer_name, product_name, list_type;$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[IS cust_lists]->(l IS lists)-[ IS list_items]->(p IS products) COLUMNS (c.name AS customer_name, p.name AS product_name, l.list_type)) ORDER BY customer_name, product_name, list_type;$$);
  SELECT customer_name,
     product_name,
     list_type
@@ -212,7 +212,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customer
 
 -- label disjunction
 SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[IS customer_orders | customer_wishlists ]->(l IS orders | wishlists)-[ IS list_items]->(p IS products) COLUMNS (c.name AS customer_name, p.name AS product_name)) ORDER BY customer_name, product_name;
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[IS customer_orders | customer_wishlists ]->(l IS orders | wishlists)-[ IS list_items]->(p IS products) COLUMNS (c.name AS customer_name, p.name AS product_name)) ORDER BY customer_name, product_name;$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)-[IS customer_orders | customer_wishlists ]->(l IS orders | wishlists)-[ IS list_items]->(p IS products) COLUMNS (c.name AS customer_name, p.name AS product_name)) ORDER BY customer_name, product_name;$$);
 SELECT customer_name,
     product_name
    FROM LATERAL ( SELECT customers.name AS customer_name,
@@ -236,7 +236,7 @@ SELECT customer_name,
 
 -- vertex to vertex connection abbreviation
 SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)->(o IS orders) COLUMNS (c.name, o.ordered_when)) ORDER BY 1;
-SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)->(o IS orders) COLUMNS (c.name, o.ordered_when)) ORDER BY 1;$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customers)->(o IS orders) COLUMNS (c.name, o.ordered_when)) ORDER BY 1;$$);
  SELECT name,
     ordered_when
    FROM LATERAL ( SELECT customers.name,
@@ -251,7 +251,7 @@ SELECT pg_pgq2sql_print($$SELECT * FROM GRAPH_TABLE (myshop MATCH (c IS customer
 CREATE TABLE x1 (a int, b text);
 INSERT INTO x1 VALUES (1, 'one'), (2, 'two');
 SELECT * FROM x1, GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US' AND c.customer_id = x1.a)-[IS customer_orders]->(o IS orders) COLUMNS (c.name AS customer_name, c.customer_id AS cid));
-SELECT pg_pgq2sql_print($$SELECT * FROM x1, GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US' AND c.customer_id = x1.a)-[IS customer_orders]->(o IS orders) COLUMNS (c.name AS customer_name, c.customer_id AS cid));$$);
+SELECT pg_pgq2sql_info($$SELECT * FROM x1, GRAPH_TABLE (myshop MATCH (c IS customers WHERE c.address = 'US' AND c.customer_id = x1.a)-[IS customer_orders]->(o IS orders) COLUMNS (c.name AS customer_name, c.customer_id AS cid));$$);
  SELECT x1.a,
     x1.b,
     "graph_table".customer_name,

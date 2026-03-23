@@ -102,12 +102,12 @@ FROM LATERAL (
 SELECT pg_pgq2sql($$SELECT ... FROM GRAPH_TABLE (...)$$);
 ```
 
-### pg_pgq2sql_print(query text)
+### pg_pgq2sql_info(query text)
 
 功能与 `pg_pgq2sql` 相同，但将结果打印到服务器日志/标准输出并返回 NULL，更方便复制。
 
 ```sql
-SELECT pg_pgq2sql_print($$SELECT ... FROM GRAPH_TABLE (...)$$);
+SELECT pg_pgq2sql_info($$SELECT ... FROM GRAPH_TABLE (...)$$);
 ```
 
 ## 运行测试
