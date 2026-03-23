@@ -79,6 +79,7 @@ drop cascades to constraint follows_following_fkey on table follows
 drop cascades to vertex users of property graph social_graph
 drop cascades to edge follows of property graph social_graph
 DROP TABLE follows CASCADE;
+DROP PROPERTY GRAPH social_graph;
 CREATE TABLE users (
     id INT PRIMARY KEY,
     name VARCHAR(50)
@@ -103,7 +104,6 @@ CREATE PROPERTY GRAPH social_graph
             SOURCE KEY (follower) REFERENCES users(id)
             DESTINATION KEY (following) REFERENCES users(id)
     );
-ERROR:  relation "social_graph" already exists
 SELECT common_name
 FROM GRAPH_TABLE (
     social_graph
@@ -111,7 +111,11 @@ FROM GRAPH_TABLE (
     WHERE a.name = '张三' AND b.name = '李四'
     COLUMNS (x.name AS common_name)
 );
-ERROR:  no property graph element of type "vertex" has label "users" associated with it in property graph "social_graph"
+ common_name 
+-------------
+ 王五
+(1 row)
+
 SELECT * FROM pg_pgq2sql($$SELECT common_name
                             FROM GRAPH_TABLE (
                                 social_graph
@@ -119,7 +123,18 @@ SELECT * FROM pg_pgq2sql($$SELECT common_name
                                 WHERE a.name = '张三' AND b.name = '李四'
                                 COLUMNS (x.name AS common_name)
                             )$$);
-ERROR:  no property graph element of type "vertex" has label "users" associated with it in property graph "social_graph"
+                                                                                                                    pg_pgq2sql                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT common_name                                                                                                                                                                                                                             +
+    FROM LATERAL ( SELECT users_1.name AS common_name                                                                                                                                                                                            +
+            FROM users,                                                                                                                                                                                                                          +
+             follows,                                                                                                                                                                                                                            +
+             users users_1,                                                                                                                                                                                                                      +
+             follows follows_1,                                                                                                                                                                                                                  +
+             users users_2                                                                                                                                                                                                                       +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = '张三'::text AND users_2.name::text = '李四'::text) "graph_table"
+(1 row)
+
 SELECT * FROM pg_pgq2sql_info($$SELECT common_name
                             FROM GRAPH_TABLE (
                                 social_graph
@@ -127,7 +142,21 @@ SELECT * FROM pg_pgq2sql_info($$SELECT common_name
                                 WHERE a.name = '张三' AND b.name = '李四'
                                 COLUMNS (x.name AS common_name)
                             )$$);
-ERROR:  no property graph element of type "vertex" has label "users" associated with it in property graph "social_graph"
+INFO:  
+ SELECT common_name
+   FROM LATERAL ( SELECT users_1.name AS common_name
+           FROM users,
+            follows,
+            users users_1,
+            follows follows_1,
+            users users_2
+          WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = '张三'::text AND users_2.name::text = '李四'::text) "graph_table";
+
+ pg_pgq2sql_info 
+-----------------
+ 
+(1 row)
+
 SELECT common_name
 FROM LATERAL ( SELECT users_1.name AS common_name
         FROM users,
@@ -149,7 +178,41 @@ FROM GRAPH_TABLE (
     WHERE a.name = '张三' AND b.name = '李四'
     COLUMNS (x.name AS common_name)
 );
-ERROR:  no property graph element of type "vertex" has label "users" associated with it in property graph "social_graph"
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Nested Loop
+   Output: users_1.name
+   Inner Unique: true
+   ->  Hash Join
+         Output: users_1.name, follows_1.follower
+         Hash Cond: (follows_1.following = users_1.id)
+         ->  Seq Scan on public.follows follows_1
+               Output: follows_1.id, follows_1.follower, follows_1.following
+         ->  Hash
+               Output: follows.following, users_1.name, users_1.id
+               ->  Nested Loop
+                     Output: follows.following, users_1.name, users_1.id
+                     Inner Unique: true
+                     ->  Hash Join
+                           Output: follows.following
+                           Inner Unique: true
+                           Hash Cond: (follows.follower = users.id)
+                           ->  Seq Scan on public.follows
+                                 Output: follows.id, follows.follower, follows.following
+                           ->  Hash
+                                 Output: users.id
+                                 ->  Seq Scan on public.users
+                                       Output: users.id
+                                       Filter: ((users.name)::text = '张三'::text)
+                     ->  Index Scan using users_pkey on public.users users_1
+                           Output: users_1.id, users_1.name
+                           Index Cond: (users_1.id = follows.following)
+   ->  Index Scan using users_pkey on public.users users_2
+         Output: users_2.id, users_2.name
+         Index Cond: (users_2.id = follows_1.follower)
+         Filter: ((users_2.name)::text = '李四'::text)
+(31 rows)
+
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT common_name
 FROM LATERAL ( SELECT users_1.name AS common_name
@@ -195,7 +258,10 @@ FROM LATERAL ( SELECT users_1.name AS common_name
 (31 rows)
 
 DROP TABLE users CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to constraint follows_follower_fkey on table follows
 drop cascades to constraint follows_following_fkey on table follows
+drop cascades to vertex users of property graph social_graph
+drop cascades to edge follows of property graph social_graph
 DROP TABLE follows CASCADE;
+DROP PROPERTY GRAPH social_graph;

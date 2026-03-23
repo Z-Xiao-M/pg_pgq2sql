@@ -58,10 +58,7 @@ FROM LATERAL ( SELECT users_1.name AS common_name
 
 DROP TABLE users CASCADE;
 DROP TABLE follows CASCADE;
-
-
-
-
+DROP PROPERTY GRAPH social_graph;
 
 CREATE TABLE users (
     id INT PRIMARY KEY,
@@ -147,3 +144,4 @@ FROM LATERAL ( SELECT users_1.name AS common_name
 
 DROP TABLE users CASCADE;
 DROP TABLE follows CASCADE;
+DROP PROPERTY GRAPH social_graph;
