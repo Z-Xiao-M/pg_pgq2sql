@@ -58,4 +58,8 @@ jobs:
           export LD_LIBRARY_PATH=$HOME/pg_build/lib
           make USE_PGXS=1 PG_CONFIG=$HOME/pg_build/bin/pg_config
           make USE_PGXS=1 PG_CONFIG=$HOME/pg_build/bin/pg_config install
-          make USE_PGXS=1 PG_CONFIG=$HOME/pg_build/bin/pg_config check
+          initdb -D /tmp/pgdata
+          pg_ctl -D /tmp/pgdata -l /tmp/pglog start -w
+          createdb contrib_regression
+          make USE_PGXS=1 PG_CONFIG=$HOME/pg_build/bin/pg_config installcheck
+          pg_ctl -D /tmp/pgdata stop -w
