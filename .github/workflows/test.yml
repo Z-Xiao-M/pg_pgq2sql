@@ -29,7 +29,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/pg_build
-          key: pg-build-v1
+          key: pg-build-v2
 
       - name: Checkout and build PostgreSQL
         if: steps.cache-pg.outputs.cache-hit != 'true'
@@ -48,8 +48,7 @@ jobs:
             --without-systemd \
             --without-selinux \
             --without-gssapi \
-            --without-readline \
-            --without-system-tzdata
+            --without-readline
           make -j$(nproc)
           make install
 
