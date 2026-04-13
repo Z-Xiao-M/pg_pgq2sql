@@ -10,7 +10,9 @@ OBJS = \
 	pg_pgq2sql.o
 
 REGRESS = simple_test \
-		  graph_table_test
+		  graph_table_test \
+		  union \
+		  infromcl_test
 
 ifdef USE_PGXS
 PG_CONFIG ?= pg_config

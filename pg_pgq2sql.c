@@ -17,14 +17,108 @@
 #include "utils/builtins.h"
 #include "parser/analyze.h"
 #include "parser/parser.h"
+#include "parser/parsetree.h"
 #include "rewrite/rewriteHandler.h"
 #include "utils/ruleutils.h"
 #include "nodes/nodes.h"
+#include "nodes/parsenodes.h"
+#include "nodes/nodeFuncs.h"
 
 PG_MODULE_MAGIC_EXT(
 					.name = "pg_pgq2sql",
                     .version = PG_VERSION
 );
+
+static void adjust_inFromCl(Query *query);
+static bool adjust_inFromCl_walker(Node *node, void *context);
+static void adjust_inFromCl_jointree(Query *query);
+
+/*
+ * adjust_inFromCl
+ *
+ * Adjust the inFromCl field of RangeTblEntry objects within a rewritten query
+ * so that pg_get_querydef() can produce correct FROM clauses.
+ *
+ * After GRAPH_TABLE rewrite, RTEs that participate in FROM clauses may have
+ * inFromCl set incorrectly.  This function recursively traverses the entire
+ * query tree and corrects the flag for any RTE that appears in a jointree
+ * fromlist.
+ */
+static void
+adjust_inFromCl(Query *query)
+{
+	if (!query)
+		return;
+
+	/* Process the top-level query's own jointree first. */
+	adjust_inFromCl_jointree(query);
+
+	/*
+	 * Recursively walk the entire query tree (subqueries in rtable,
+	 * setOperations, etc.) using the standard walker infrastructure.
+	 * We don't need QTW_EXAMINE_RTES flags because we only act on Query
+	 * nodes to fix their jointrees.
+	 */
+	query_tree_walker(query, adjust_inFromCl_walker, NULL, 0);
+}
+
+/*
+ * adjust_inFromCl_walker
+ *
+ * Callback for query_tree_walker.  When we encounter a Query node, process
+ * its jointree.  The walker infrastructure handles recursing into subqueries,
+	 * set operations, and other child nodes automatically.
+ */
+static bool
+adjust_inFromCl_walker(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Query))
+	{
+		Query	   *query = (Query *) node;
+
+		adjust_inFromCl_jointree(query);
+
+		/* Continue walking into subqueries, set operations, etc. */
+		return query_tree_walker(query, adjust_inFromCl_walker, context, 0);
+	}
+
+	return expression_tree_walker(node, adjust_inFromCl_walker, context);
+}
+
+/*
+ * adjust_inFromCl_jointree
+ *
+ * For a single Query, scan its jointree fromlist and set inFromCl = true for
+ * any RTE that appears there.  This mirrors what ruleutils.c's get_from_clause
+ * does: it iterates jointree->fromlist and skips RTEs where inFromCl is false.
+ * By ensuring all fromlist RTEs have inFromCl = true, we guarantee the
+ * deparsed SQL contains the complete FROM clause.
+ */
+static void
+adjust_inFromCl_jointree(Query *query)
+{
+	ListCell   *lc;
+
+	if (!query->jointree || !query->jointree->fromlist)
+		return;
+
+	foreach(lc, query->jointree->fromlist)
+	{
+		Node	   *jtnode = (Node *) lfirst(lc);
+
+		if (IsA(jtnode, RangeTblRef))
+		{
+			RangeTblEntry *rte = rt_fetch(((RangeTblRef *) jtnode)->rtindex,
+										  query->rtable);
+
+			if (!rte->inFromCl)
+				rte->inFromCl = true;
+		}
+	}
+}
 
 PG_FUNCTION_INFO_V1(pg_pgq2sql);
 
@@ -53,7 +147,7 @@ pg_pgq2sql(PG_FUNCTION_ARGS)
     if (list_length(parsetree_list) != 1)
 		elog(ERROR, "expect exactly 1 SQL statement, found %d", list_length(parsetree_list));
 
-    /* Step 2: Analyalyze the parse tree */
+    /* Step 2: Analyze the parse tree */
     query = parse_analyze_fixedparams(linitial(parsetree_list),
                                              query_string,
                                              NULL, 0, NULL);
@@ -70,7 +164,10 @@ pg_pgq2sql(PG_FUNCTION_ARGS)
 
     new_query = linitial(querytree_list);
 
-    /* Step 4: Convert the rewritten Query back to SQL string */
+    /* Step 4: Adjust inFromCl for correct FROM clause deparsing */
+    adjust_inFromCl(new_query);
+
+    /* Step 5: Convert the rewritten Query back to SQL string */
     result = pg_get_querydef(new_query, true);
     pfree(query_string);
     PG_RETURN_TEXT_P(cstring_to_text(result));
@@ -117,7 +214,11 @@ pg_pgq2sql_info(PG_FUNCTION_ARGS)
              list_length(querytree_list));
 
     new_query = linitial(querytree_list);
-    /* Step 4: Convert the rewritten Query back to SQL string and print it */
+
+    /* Step 4: Adjust inFromCl for correct FROM clause deparsing */
+    adjust_inFromCl(new_query);
+
+    /* Step 5: Convert the rewritten Query back to SQL string and print it */
     result = pg_get_querydef(new_query, true);
 
     pfree(query_string);

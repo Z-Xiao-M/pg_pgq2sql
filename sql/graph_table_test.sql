@@ -267,4 +267,3 @@ SELECT pg_pgq2sql_info($$SELECT * FROM x1, GRAPH_TABLE (myshop MATCH (c IS custo
 DROP TABLE x1;
 
 DROP SCHEMA graph_table_tests CASCADE;
-DROP EXTENSION pg_pgq2sql;

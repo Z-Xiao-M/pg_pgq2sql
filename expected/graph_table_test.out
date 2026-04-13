@@ -580,4 +580,3 @@ drop cascades to table wishlists
 drop cascades to table wishlist_items
 drop cascades to table customer_wishlists
 drop cascades to property graph myshop
-DROP EXTENSION pg_pgq2sql;

@@ -1,0 +1,821 @@
+-- ============================================================
+-- Test cases to verify correct inFromCl adjustment.
+--
+-- Pattern for each case:
+--   1. Execute the PGQ query directly, show results
+--   2. Call pg_pgq2sql() to obtain the equivalent SQL
+--   3. Execute the converted SQL, show results
+--   4. Assert the two result sets are identical (EXCEPT both ways = empty)
+-- ============================================================
+CREATE SCHEMA infromcl_test;
+SET search_path = infromcl_test, public;
+-- ============================================================
+-- Setup
+-- ============================================================
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    name VARCHAR(50),
+    city VARCHAR(30)
+);
+CREATE TABLE follows (
+    id INT PRIMARY KEY,
+    follower INT REFERENCES users(id),
+    following INT REFERENCES users(id)
+);
+CREATE TABLE premium_follows (
+    id INT PRIMARY KEY,
+    follower INT REFERENCES users(id),
+    following INT REFERENCES users(id)
+);
+-- data:
+--   users:  Alice(BJ) -1  Bob(SH) -2  Charlie(BJ) -3  David(SH) -4  Eve(GZ) -5
+--   follows:          1->2, 1->3, 2->3, 2->4, 3->4, 3->5
+--   premium_follows:  1->4, 2->5, 3->1
+INSERT INTO users VALUES
+    (1, 'Alice', 'Beijing'),
+    (2, 'Bob', 'Shanghai'),
+    (3, 'Charlie', 'Beijing'),
+    (4, 'David', 'Shanghai'),
+    (5, 'Eve', 'Guangzhou');
+INSERT INTO follows VALUES
+    (1, 1, 2), (2, 1, 3), (3, 2, 3), (4, 2, 4), (5, 3, 4), (6, 3, 5);
+INSERT INTO premium_follows VALUES
+    (1, 1, 4), (2, 2, 5), (3, 3, 1);
+CREATE PROPERTY GRAPH sg
+    VERTEX TABLES (users)
+    EDGE TABLES (
+        follows
+            SOURCE KEY (follower) REFERENCES users(id)
+            DESTINATION KEY (following) REFERENCES users(id)
+    );
+CREATE PROPERTY GRAPH sg_multi
+    VERTEX TABLES (users)
+    EDGE TABLES (
+        follows
+            SOURCE KEY (follower) REFERENCES users(id)
+            DESTINATION KEY (following) REFERENCES users(id)
+            LABEL connections,
+        premium_follows
+            SOURCE KEY (follower) REFERENCES users(id)
+            DESTINATION KEY (following) REFERENCES users(id)
+            LABEL connections
+    );
+-- ============================================================
+-- Case 1: Single vertex (1 table in sub-FROM)
+-- ============================================================
+-- Step 1: PGQ result
+CREATE TEMP TABLE pgq_result AS
+SELECT name FROM GRAPH_TABLE (sg MATCH (a IS users) COLUMNS (a.name));
+SELECT name FROM pgq_result ORDER BY name;
+  name   
+---------
+ Alice
+ Bob
+ Charlie
+ David
+ Eve
+(5 rows)
+
+-- Step 2: converted SQL
+SELECT * FROM pg_pgq2sql($$
+    SELECT name FROM GRAPH_TABLE (sg MATCH (a IS users) COLUMNS (a.name))
+$$);
+              pg_pgq2sql              
+--------------------------------------
+  SELECT name                        +
+    FROM LATERAL ( SELECT users.name +
+            FROM users) "graph_table"
+(1 row)
+
+-- Step 3: execute converted SQL
+CREATE TEMP TABLE sql_result AS
+SELECT name FROM LATERAL ( SELECT users.name FROM users) "graph_table";
+SELECT name FROM sql_result ORDER BY name;
+  name   
+---------
+ Alice
+ Bob
+ Charlie
+ David
+ Eve
+(5 rows)
+
+-- Step 4: verify identical
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ name 
+------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 2: Two-hop path (3 tables: vertex-edge-vertex)
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT friend_name
+FROM GRAPH_TABLE (
+    sg MATCH (a IS users)-[IS follows]->(b IS users)
+    WHERE a.name = 'Alice'
+    COLUMNS (b.name AS friend_name)
+);
+SELECT friend_name FROM pgq_result ORDER BY friend_name;
+ friend_name 
+-------------
+ Bob
+ Charlie
+(2 rows)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT friend_name
+    FROM GRAPH_TABLE (
+        sg MATCH (a IS users)-[IS follows]->(b IS users)
+        WHERE a.name = 'Alice'
+        COLUMNS (b.name AS friend_name)
+    )
+$$);
+                                                             pg_pgq2sql                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+  SELECT friend_name                                                                                                               +
+    FROM LATERAL ( SELECT users_1.name AS friend_name                                                                              +
+            FROM users,                                                                                                            +
+             follows,                                                                                                              +
+             users users_1                                                                                                         +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users.name::text = 'Alice'::text) "graph_table"
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT friend_name
+FROM LATERAL ( SELECT users_1.name AS friend_name
+           FROM users, follows, users users_1
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following
+             AND users.name::text = 'Alice'::text) "graph_table";
+SELECT friend_name FROM sql_result ORDER BY friend_name;
+ friend_name 
+-------------
+ Bob
+ Charlie
+(2 rows)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ friend_name 
+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 3: Three-hop path (5 tables)
+--   Alice -[]-> x <-[]- Bob  =>  x = common friend
+--   Alice follows Charlie, Bob follows Charlie => common = Charlie
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT common_name
+FROM GRAPH_TABLE (
+    sg MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+    WHERE a.name = 'Alice' AND b.name = 'Bob'
+    COLUMNS (x.name AS common_name)
+);
+SELECT common_name FROM pgq_result;
+ common_name 
+-------------
+ Charlie
+(1 row)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT common_name
+    FROM GRAPH_TABLE (
+        sg MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+        WHERE a.name = 'Alice' AND b.name = 'Bob'
+        COLUMNS (x.name AS common_name)
+    )
+$$);
+                                                                                                                    pg_pgq2sql                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT common_name                                                                                                                                                                                                                             +
+    FROM LATERAL ( SELECT users_1.name AS common_name                                                                                                                                                                                            +
+            FROM users,                                                                                                                                                                                                                          +
+             follows,                                                                                                                                                                                                                            +
+             users users_1,                                                                                                                                                                                                                      +
+             follows follows_1,                                                                                                                                                                                                                  +
+             users users_2                                                                                                                                                                                                                       +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = 'Alice'::text AND users_2.name::text = 'Bob'::text) "graph_table"
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT common_name
+FROM LATERAL ( SELECT users_1.name AS common_name
+           FROM users, follows, users users_1, follows follows_1, users users_2
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following
+             AND users_2.id = follows_1.follower
+             AND users_1.id = follows_1.following
+             AND users.name::text = 'Alice'::text
+             AND users_2.name::text = 'Bob'::text) "graph_table";
+SELECT common_name FROM sql_result;
+ common_name 
+-------------
+ Charlie
+(1 row)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ common_name 
+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 4: Reverse edge direction <-[]-
+--   who follows David? => Bob, Charlie
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT follower_name
+FROM GRAPH_TABLE (
+    sg MATCH (b IS users)<-[]-(a IS users)
+    WHERE b.name = 'David'
+    COLUMNS (a.name AS follower_name)
+);
+SELECT follower_name FROM pgq_result ORDER BY follower_name;
+ follower_name 
+---------------
+ Bob
+ Charlie
+(2 rows)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT follower_name
+    FROM GRAPH_TABLE (
+        sg MATCH (b IS users)<-[]-(a IS users)
+        WHERE b.name = 'David'
+        COLUMNS (a.name AS follower_name)
+    )
+$$);
+                                                             pg_pgq2sql                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+  SELECT follower_name                                                                                                             +
+    FROM LATERAL ( SELECT users_1.name AS follower_name                                                                            +
+            FROM users,                                                                                                            +
+             follows,                                                                                                              +
+             users users_1                                                                                                         +
+           WHERE users_1.id = follows.follower AND users.id = follows.following AND users.name::text = 'David'::text) "graph_table"
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT follower_name
+FROM LATERAL ( SELECT users.name AS follower_name
+           FROM users, follows, users users_1
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following
+             AND users_1.name::text = 'David'::text) "graph_table";
+SELECT follower_name FROM sql_result ORDER BY follower_name;
+ follower_name 
+---------------
+ Bob
+ Charlie
+(2 rows)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ follower_name 
+---------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 5: No WHERE clause (pure path pattern)
+--   all follows: 6 rows
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT src, dst
+FROM GRAPH_TABLE (
+    sg MATCH (a IS users)-[IS follows]->(b IS users)
+    COLUMNS (a.name AS src, b.name AS dst)
+);
+SELECT src, dst FROM pgq_result ORDER BY src, dst;
+   src   |   dst   
+---------+---------
+ Alice   | Bob
+ Alice   | Charlie
+ Bob     | Charlie
+ Bob     | David
+ Charlie | David
+ Charlie | Eve
+(6 rows)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT src, dst
+    FROM GRAPH_TABLE (
+        sg MATCH (a IS users)-[IS follows]->(b IS users)
+        COLUMNS (a.name AS src, b.name AS dst)
+    )
+$$);
+                                          pg_pgq2sql                                           
+-----------------------------------------------------------------------------------------------
+  SELECT src,                                                                                 +
+     dst                                                                                      +
+    FROM LATERAL ( SELECT users.name AS src,                                                  +
+             users_1.name AS dst                                                              +
+            FROM users,                                                                       +
+             follows,                                                                         +
+             users users_1                                                                    +
+           WHERE users.id = follows.follower AND users_1.id = follows.following) "graph_table"
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT src, dst
+FROM LATERAL ( SELECT users.name AS src, users_1.name AS dst
+           FROM users, follows, users users_1
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following) "graph_table";
+SELECT src, dst FROM sql_result ORDER BY src, dst;
+   src   |   dst   
+---------+---------
+ Alice   | Bob
+ Alice   | Charlie
+ Bob     | Charlie
+ Bob     | David
+ Charlie | David
+ Charlie | Eve
+(6 rows)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ src | dst 
+-----+-----
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 6: Pure SQL query (no GRAPH_TABLE)
+--   inFromCl should already be correct; adjust_inFromCl must not
+--   break anything.
+--   Beijing users who follow someone: Alice follows Bob(1), Alice follows Charlie(2)
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT u.name, f.id AS follow_id
+FROM users u JOIN follows f ON u.id = f.follower
+WHERE u.city = 'Beijing';
+SELECT u.name, f.id AS follow_id
+FROM users u JOIN follows f ON u.id = f.follower
+WHERE u.city = 'Beijing'
+ORDER BY 1, 2;
+  name   | follow_id 
+---------+-----------
+ Alice   |         1
+ Alice   |         2
+ Charlie |         5
+ Charlie |         6
+(4 rows)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT u.name, f.id AS follow_id
+    FROM users u JOIN follows f ON u.id = f.follower
+    WHERE u.city = 'Beijing'
+$$);
+                pg_pgq2sql                
+------------------------------------------
+  SELECT u.name,                         +
+     f.id AS follow_id                   +
+    FROM users u                         +
+      JOIN follows f ON u.id = f.follower+
+   WHERE u.city::text = 'Beijing'::text
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT u.name, f.id AS follow_id
+FROM users u JOIN follows f ON u.id = f.follower
+WHERE u.city = 'Beijing';
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ name | follow_id 
+------+-----------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 7: SQL table mixed with GRAPH_TABLE (lateral join)
+--   For each city in city_filter, find who is followed from that city
+--   Beijing: Alice->Bob, Alice->Charlie, Charlie->David, Charlie->Eve
+--   Shanghai: Bob->Charlie, Bob->David
+-- ============================================================
+CREATE TABLE city_filter (city_name VARCHAR(30));
+INSERT INTO city_filter VALUES ('Beijing'), ('Shanghai');
+CREATE TEMP TABLE pgq_result AS
+SELECT city_name, friend_name
+FROM city_filter,
+     GRAPH_TABLE (
+         sg MATCH (a IS users)-[IS follows]->(b IS users)
+         WHERE a.city = city_filter.city_name
+         COLUMNS (b.name AS friend_name)
+     );
+SELECT city_name, friend_name FROM pgq_result ORDER BY 1, 2;
+ city_name | friend_name 
+-----------+-------------
+ Beijing   | Bob
+ Beijing   | Charlie
+ Beijing   | David
+ Beijing   | Eve
+ Shanghai  | Charlie
+ Shanghai  | David
+(6 rows)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT city_name, friend_name
+    FROM city_filter,
+         GRAPH_TABLE (
+             sg MATCH (a IS users)-[IS follows]->(b IS users)
+             WHERE a.city = city_filter.city_name
+             COLUMNS (b.name AS friend_name)
+         )
+$$);
+                                                                    pg_pgq2sql                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT city_filter.city_name,                                                                                                                  +
+     "graph_table".friend_name                                                                                                                   +
+    FROM city_filter,                                                                                                                            +
+     LATERAL ( SELECT users_1.name AS friend_name                                                                                                +
+            FROM users,                                                                                                                          +
+             follows,                                                                                                                            +
+             users users_1                                                                                                                       +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users.city::text = city_filter.city_name::text) "graph_table"
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT city_name, friend_name
+FROM city_filter,
+     LATERAL ( SELECT users_1.name AS friend_name
+            FROM users, follows, users users_1
+            WHERE users.id = follows.follower
+              AND users_1.id = follows.following
+              AND users.city::text = city_filter.city_name::text) "graph_table";
+SELECT city_name, friend_name FROM sql_result ORDER BY 1, 2;
+ city_name | friend_name 
+-----------+-------------
+ Beijing   | Bob
+ Beijing   | Charlie
+ Beijing   | David
+ Beijing   | Eve
+ Shanghai  | Charlie
+ Shanghai  | David
+(6 rows)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ city_name | friend_name 
+-----------+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 8: GRAPH_TABLE with WHERE filter on outer columns
+--   Beijing users' friends whose name starts with 'C' => Charlie
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT friend_name
+FROM GRAPH_TABLE (
+    sg MATCH (a IS users)-[IS follows]->(b IS users)
+    WHERE a.city = 'Beijing'
+    COLUMNS (b.name AS friend_name)
+)
+WHERE friend_name LIKE 'C%';
+SELECT friend_name FROM pgq_result;
+ friend_name 
+-------------
+ Charlie
+(1 row)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT friend_name
+    FROM GRAPH_TABLE (
+        sg MATCH (a IS users)-[IS follows]->(b IS users)
+        WHERE a.city = 'Beijing'
+        COLUMNS (b.name AS friend_name)
+    )
+    WHERE friend_name LIKE 'C%'
+$$);
+                                                              pg_pgq2sql                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+  SELECT friend_name                                                                                                                 +
+    FROM LATERAL ( SELECT users_1.name AS friend_name                                                                                +
+            FROM users,                                                                                                              +
+             follows,                                                                                                                +
+             users users_1                                                                                                           +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users.city::text = 'Beijing'::text) "graph_table"+
+   WHERE friend_name::text ~~ 'C%'::text
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT friend_name
+FROM LATERAL ( SELECT users_1.name AS friend_name
+           FROM users, follows, users users_1
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following
+             AND users.city::text = 'Beijing'::text) "graph_table"
+WHERE friend_name LIKE 'C%';
+SELECT friend_name FROM sql_result;
+ friend_name 
+-------------
+ Charlie
+(1 row)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ friend_name 
+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 9: GRAPH_TABLE with ORDER BY and LIMIT
+--   Alice's friends sorted: Bob, Charlie => LIMIT 1 => Bob
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT friend_name
+FROM GRAPH_TABLE (
+    sg MATCH (a IS users)-[IS follows]->(b IS users)
+    WHERE a.name = 'Alice'
+    COLUMNS (b.name AS friend_name)
+)
+ORDER BY friend_name LIMIT 1;
+SELECT friend_name FROM pgq_result;
+ friend_name 
+-------------
+ Bob
+(1 row)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT friend_name
+    FROM GRAPH_TABLE (
+        sg MATCH (a IS users)-[IS follows]->(b IS users)
+        WHERE a.name = 'Alice'
+        COLUMNS (b.name AS friend_name)
+    )
+    ORDER BY friend_name LIMIT 1
+$$);
+                                                             pg_pgq2sql                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+  SELECT friend_name                                                                                                               +
+    FROM LATERAL ( SELECT users_1.name AS friend_name                                                                              +
+            FROM users,                                                                                                            +
+             follows,                                                                                                              +
+             users users_1                                                                                                         +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users.name::text = 'Alice'::text) "graph_table"+
+   ORDER BY friend_name                                                                                                            +
+  LIMIT 1
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT friend_name
+FROM LATERAL ( SELECT users_1.name AS friend_name
+           FROM users, follows, users users_1
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following
+             AND users.name::text = 'Alice'::text) "graph_table"
+ORDER BY friend_name LIMIT 1;
+SELECT friend_name FROM sql_result;
+ friend_name 
+-------------
+ Bob
+(1 row)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ friend_name 
+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 10: Subquery wrapping GRAPH_TABLE
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT friend_name
+FROM (
+    SELECT friend_name
+    FROM GRAPH_TABLE (
+        sg MATCH (a IS users)-[IS follows]->(b IS users)
+        WHERE a.name = 'Alice'
+        COLUMNS (b.name AS friend_name)
+    )
+) sub;
+SELECT friend_name FROM pgq_result ORDER BY friend_name;
+ friend_name 
+-------------
+ Bob
+ Charlie
+(2 rows)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT friend_name
+    FROM (
+        SELECT friend_name
+        FROM GRAPH_TABLE (
+            sg MATCH (a IS users)-[IS follows]->(b IS users)
+            WHERE a.name = 'Alice'
+            COLUMNS (b.name AS friend_name)
+        )
+    ) sub
+$$);
+                                                                   pg_pgq2sql                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT friend_name                                                                                                                            +
+    FROM ( SELECT "graph_table".friend_name                                                                                                     +
+            FROM LATERAL ( SELECT users_1.name AS friend_name                                                                                   +
+                    FROM users,                                                                                                                 +
+                     follows,                                                                                                                   +
+                     users users_1                                                                                                              +
+                   WHERE users.id = follows.follower AND users_1.id = follows.following AND users.name::text = 'Alice'::text) "graph_table") sub
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT friend_name
+FROM (
+    SELECT friend_name
+    FROM LATERAL ( SELECT users_1.name AS friend_name
+               FROM users, follows, users users_1
+               WHERE users.id = follows.follower
+                 AND users_1.id = follows.following
+                 AND users.name::text = 'Alice'::text) "graph_table"
+) sub;
+SELECT friend_name FROM sql_result ORDER BY friend_name;
+ friend_name 
+-------------
+ Bob
+ Charlie
+(2 rows)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ friend_name 
+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 11: UNION ALL from multi-label edge (connections)
+--   Alice's connections via follows: Bob, Charlie
+--   Alice's connections via premium_follows: David
+--   Total: Bob, Charlie, David
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT friend_name
+FROM GRAPH_TABLE (
+    sg_multi MATCH (a IS users)-[IS connections]->(b IS users)
+    WHERE a.name = 'Alice'
+    COLUMNS (b.name AS friend_name)
+);
+SELECT friend_name FROM pgq_result ORDER BY friend_name;
+ friend_name 
+-------------
+ Bob
+ Charlie
+ David
+(3 rows)
+
+SELECT * FROM pg_pgq2sql($$
+    SELECT friend_name
+    FROM GRAPH_TABLE (
+        sg_multi MATCH (a IS users)-[IS connections]->(b IS users)
+        WHERE a.name = 'Alice'
+        COLUMNS (b.name AS friend_name)
+    )
+$$);
+                                                                     pg_pgq2sql                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+  SELECT friend_name                                                                                                                               +
+    FROM LATERAL ( SELECT users_1.name AS friend_name                                                                                              +
+            FROM users,                                                                                                                            +
+             follows,                                                                                                                              +
+             users users_1                                                                                                                         +
+           WHERE users.id = follows.follower AND users_1.id = follows.following AND users.name::text = 'Alice'::text                               +
+         UNION ALL                                                                                                                                 +
+          SELECT users_1.name AS friend_name                                                                                                       +
+            FROM users,                                                                                                                            +
+             premium_follows,                                                                                                                      +
+             users users_1                                                                                                                         +
+           WHERE users.id = premium_follows.follower AND users_1.id = premium_follows.following AND users.name::text = 'Alice'::text) "graph_table"
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT friend_name
+FROM LATERAL ( SELECT users_1.name AS friend_name
+           FROM users, follows, users users_1
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following
+             AND users.name::text = 'Alice'::text
+         UNION ALL
+          SELECT users_1.name AS friend_name
+           FROM users, premium_follows, users users_1
+           WHERE users.id = premium_follows.follower
+             AND users_1.id = premium_follows.following
+             AND users.name::text = 'Alice'::text) "graph_table";
+SELECT friend_name FROM sql_result ORDER BY friend_name;
+ friend_name 
+-------------
+ Bob
+ Charlie
+ David
+(3 rows)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ friend_name 
+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- ============================================================
+-- Case 12: pg_pgq2sql_info variant
+-- ============================================================
+CREATE TEMP TABLE pgq_result AS
+SELECT common_name
+FROM GRAPH_TABLE (
+    sg MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+    WHERE a.name = 'Alice' AND b.name = 'Bob'
+    COLUMNS (x.name AS common_name)
+);
+SELECT common_name FROM pgq_result;
+ common_name 
+-------------
+ Charlie
+(1 row)
+
+SELECT * FROM pg_pgq2sql_info($$
+    SELECT common_name
+    FROM GRAPH_TABLE (
+        sg MATCH (a IS users)-[]->(x IS users)<-[]-(b IS users)
+        WHERE a.name = 'Alice' AND b.name = 'Bob'
+        COLUMNS (x.name AS common_name)
+    )
+$$);
+INFO:  
+ SELECT common_name
+   FROM LATERAL ( SELECT users_1.name AS common_name
+           FROM users,
+            follows,
+            users users_1,
+            follows follows_1,
+            users users_2
+          WHERE users.id = follows.follower AND users_1.id = follows.following AND users_2.id = follows_1.follower AND users_1.id = follows_1.following AND users.name::text = 'Alice'::text AND users_2.name::text = 'Bob'::text) "graph_table";
+
+ pg_pgq2sql_info 
+-----------------
+ 
+(1 row)
+
+CREATE TEMP TABLE sql_result AS
+SELECT common_name
+FROM LATERAL ( SELECT users_1.name AS common_name
+           FROM users, follows, users users_1, follows follows_1, users users_2
+           WHERE users.id = follows.follower
+             AND users_1.id = follows.following
+             AND users_2.id = follows_1.follower
+             AND users_1.id = follows_1.following
+             AND users.name::text = 'Alice'::text
+             AND users_2.name::text = 'Bob'::text) "graph_table";
+SELECT common_name FROM sql_result;
+ common_name 
+-------------
+ Charlie
+(1 row)
+
+(SELECT * FROM pgq_result EXCEPT ALL SELECT * FROM sql_result)
+UNION ALL
+(SELECT * FROM sql_result EXCEPT ALL SELECT * FROM pgq_result);
+ common_name 
+-------------
+(0 rows)
+
+DROP TABLE pgq_result;
+DROP TABLE sql_result;
+-- Cleanup
+DROP TABLE city_filter;
+DROP PROPERTY GRAPH sg_multi;
+DROP PROPERTY GRAPH sg;
+DROP TABLE premium_follows CASCADE;
+DROP TABLE follows CASCADE;
+DROP TABLE users CASCADE;
+DROP SCHEMA infromcl_test CASCADE;
