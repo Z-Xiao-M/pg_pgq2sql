@@ -1,0 +1,62 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout pg_pgq2sql
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            zlib1g-dev \
+            bison \
+            flex \
+            pkg-config
+
+      - name: Cache PostgreSQL build
+        id: cache-pg
+        uses: actions/cache@v4
+        with:
+          path: ~/pg_build
+          key: pg-build-v1
+
+      - name: Checkout and build PostgreSQL
+        if: steps.cache-pg.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth=1 https://github.com/postgres/postgres.git ~/pg_src
+          cd ~/pg_src
+          ./configure --prefix=$HOME/pg_build \
+            --without-icu \
+            --without-openssl \
+            --without-ldap \
+            --without-pam \
+            --without-libxml \
+            --without-libxslt \
+            --without-lz4 \
+            --without-zstd \
+            --without-systemd \
+            --without-selinux \
+            --without-gssapi \
+            --without-readline \
+            --without-system-tzdata
+          make -j$(nproc)
+          make install
+
+      - name: Build and test pg_pgq2sql
+        run: |
+          export PATH=$HOME/pg_build/bin:$PATH
+          export LD_LIBRARY_PATH=$HOME/pg_build/lib
+          make USE_PGXS=1 PG_CONFIG=$HOME/pg_build/bin/pg_config
+          make USE_PGXS=1 PG_CONFIG=$HOME/pg_build/bin/pg_config install
+          make USE_PGXS=1 PG_CONFIG=$HOME/pg_build/bin/pg_config check
