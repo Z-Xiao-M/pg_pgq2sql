@@ -12,7 +12,8 @@ OBJS = \
 REGRESS = simple_test \
 		  graph_table_test \
 		  union \
-		  infromcl_test
+		  infromcl_test \
+		  complex
 
 ifdef USE_PGXS
 PG_CONFIG ?= pg_config
